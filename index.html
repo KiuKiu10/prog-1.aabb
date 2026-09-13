@@ -33,7 +33,7 @@ hr{border:0;border-top:1px solid var(--line);margin:20px 0}
 
 <section id="home" class="card">
 <h2>✨ ゲームを作る</h2>
-<input id="hostName" placeholder="あなたの名前（例：たけだ）">
+<input id="hostName" placeholder="あなたの名前（例：やまだ）">
 <input id="topic" style="margin-top:9px" placeholder="お題（例：この中で一番モテそうな人は？）">
 <button onclick="createGame()">部屋を作る</button>
 <hr>
@@ -139,7 +139,7 @@ function copyInvite(){
 function startRound(){
  if(players.length<2)return alert("2人以上で遊ぶのがおすすめです！");
  answers=[];votes={};qIndex=0;gameStarted=true;
- broadcast({type:"round",topic});show("hostManage");updateHostAnswers();
+ broadcast({type:"round",topic});show("answer");$("topicAnswer").textContent=topic;
 }
 function updateHostAnswers(){
  $("received").textContent=`回答：${answers.length} / ${players.length-1}人`;
@@ -148,7 +148,7 @@ function updateHostAnswers(){
 }
 function submitAnswer(){
  let text=$("myAnswer").value.trim();if(!text)return alert("回答を書いてください！");
- send(hostConn,{type:"answer",name:myName,text});$("myAnswer").value="";show("lobby");
+ if(isHost){ answers.push({peer:peer.id,name:myName,text}); show("hostManage"); updateHostAnswers(); } else send(hostConn,{type:"answer",name:myName,text});$("myAnswer").value="";show("lobby");
  alert("回答しました！ホストが次へ進むまで待ってね。");
 }
 function startGuessing(){if(!answers.length)return alert("まだ回答がありません");qIndex=0;broadcastQuestion();show("hostReveal")}
