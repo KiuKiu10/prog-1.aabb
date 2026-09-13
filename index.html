@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>誰が書いたでしょう？オンライン</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+:root{--bg:#e8f8ff;--card:#fff;--main:#36a9d6;--main2:#197ea7;--text:#243746;--muted:#718692;--line:#d5edf5}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(145deg,#e6f8ff,#f8fdff);font-family:system-ui,-apple-system,"Noto Sans JP",sans-serif;color:var(--text)}
+.wrap{max-width:760px;margin:auto;padding:18px}.logo{text-align:center;font-weight:900;color:var(--main2);font-size:28px;margin:8px 0 18px}
+.card{background:var(--card);border-radius:24px;padding:24px;box-shadow:0 10px 35px #6ba7b522;margin-bottom:14px}
+h2{margin:0 0 16px}h3{margin-bottom:8px}.muted{color:var(--muted);font-size:14px}.center{text-align:center}
+input,textarea,button{font:inherit;width:100%;border-radius:14px;padding:13px;border:2px solid var(--line)}
+input,textarea{background:#fbfeff}textarea{min-height:120px;resize:vertical}
+button{border:0;background:var(--main);color:white;font-weight:800;cursor:pointer;margin-top:10px}
+button:hover{filter:brightness(.96)}button.secondary{background:#8ba0aa}button.orange{background:#f2a65a}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}.hide{display:none!important}
+.pill{display:inline-block;background:#eaf8fd;padding:7px 12px;border-radius:99px;margin:4px;font-size:14px}
+.code{font-size:30px;letter-spacing:5px;font-weight:900;text-align:center;color:var(--main2);background:#eefaff;padding:12px;border-radius:16px}
+.topic{font-size:22px;font-weight:900;text-align:center;background:#f4fcff;border-radius:18px;padding:18px}
+.answer{border:2px solid var(--line);border-radius:18px;padding:18px;margin:10px 0;background:#fbfeff}
+.answer .txt{font-size:23px;font-weight:800;margin:8px 0}.num{color:var(--main2);font-weight:900}
+.choice{background:#fff;border:2px solid var(--line);color:var(--text);text-align:left}.choice:hover{background:#effaff}
+.bar{height:9px;background:#e7f3f7;border-radius:99px;overflow:hidden;margin:12px 0}.bar>div{height:100%;background:var(--main);width:0}
+.result-name{font-size:32px;font-weight:900;color:var(--main2)}
+hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+@media(max-width:560px){.grid{grid-template-columns:1fr}.wrap{padding:12px}.card{padding:18px}.logo{font-size:24px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="logo">🎮 誰が書いたでしょう？</div>
+
+<section id="home" class="card">
+<h2>✨ ゲームを作る</h2>
+<input id="hostName" placeholder="あなたの名前（例：たけだ）">
+<input id="topic" style="margin-top:9px" placeholder="お題（例：この中で一番モテそうな人は？）">
+<button onclick="createGame()">部屋を作る</button>
+<hr>
+<h2>🚪 ゲームに参加</h2>
+<input id="joinRoom" placeholder="部屋ID（例：A7K2P）">
+<input id="joinName" style="margin-top:9px" placeholder="あなたの名前">
+<button onclick="joinGame()">参加する</button>
+<p class="muted">※全員が同じURLを開いて、部屋IDを入力すれば参加できます。</p>
+</section>
+
+<section id="lobby" class="card hide">
+<h2>👥 待機ルーム</h2>
+<div class="code" id="roomCode"></div>
+<button class="secondary" onclick="copyInvite()">🔗 招待情報をコピー</button>
+<p class="muted center" id="status"></p>
+<div id="playerList"></div>
+<div id="hostLobby">
+<hr><h3>お題</h3><div class="topic" id="topicLobby"></div>
+<button onclick="startRound()">▶️ 回答スタート</button>
+</div>
+</section>
+
+<section id="answer" class="card hide">
+<h2>✏️ 回答タイム</h2>
+<div class="topic" id="topicAnswer"></div>
+<p class="muted">自分が書いたと分からないように、回答だけが公開されます。</p>
+<textarea id="myAnswer" maxlength="200" placeholder="思いついた答えを書いてね！"></textarea>
+<div class="muted" id="answerCount">0 / 200</div>
+<button onclick="submitAnswer()">回答する</button>
+</section>
+
+<section id="hostManage" class="card hide">
+<h2>📋 回答を確認</h2>
+<p id="received"></p><div class="bar"><div id="receivedBar"></div></div>
+<div id="hostAnswerList"></div>
+<button onclick="startGuessing()">🤔 当てるタイムへ</button>
+</section>
+
+<section id="guess" class="card hide">
+<h2>🤔 誰が書いたでしょう？</h2>
+<p id="guessProgress" class="muted"></p>
+<div class="answer"><div class="num" id="guessNum"></div><div class="txt" id="guessText"></div></div>
+<div id="choices"></div>
+</section>
+
+<section id="hostReveal" class="card hide">
+<h2>🎉 正解発表</h2>
+<div class="answer center"><div class="txt" id="revealText"></div><div class="result-name" id="revealName"></div></div>
+<p class="center" id="scoreText"></p>
+<button onclick="nextQuestion()">次の回答へ</button>
+</section>
+
+<section id="finished" class="card hide center">
+<h2>🏆 ゲーム終了！</h2><div id="ranking"></div>
+<button onclick="location.reload()">もう一度遊ぶ</button>
+</section>
+</div>
+
+<script>
+let peer=null, hostConn=null, conns=[], isHost=false, myName="", room="", topic="";
+let players=[], answers=[], votes={}, qIndex=0, gameStarted=false;
+
+const $=id=>document.getElementById(id);
+function show(id){document.querySelectorAll("section").forEach(s=>s.classList.add("hide"));$(id).classList.remove("hide")}
+function esc(s){return String(s).replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]))}
+function rid(){return Math.random().toString(36).slice(2,7).toUpperCase()}
+function send(c,d){if(c&&c.open)c.send(d)}
+function broadcast(d){conns.forEach(c=>send(c,d))}
+function renderPlayers(){$("playerList").innerHTML=players.map(n=>`<span class="pill">👤 ${esc(n)}</span>`).join("")}
+function updateStatus(){ $("status").textContent=players.length+"人参加中"; renderPlayers() }
+
+async function createGame(){
+ myName=$("hostName").value.trim()||"ホスト"; topic=$("topic").value.trim()||"この中で一番○○そうな人は？";
+ room=rid();isHost=true;
+ peer=new Peer("darewrote-"+room);
+ peer.on("open",()=>{players=[myName];$("roomCode").textContent=room;$("topicLobby").textContent=topic;updateStatus();show("lobby")});
+ peer.on("connection",c=>{
+   conns.push(c);
+   c.on("data",d=>hostReceive(c,d));
+   c.on("close",()=>{});
+   c.on("open",()=>send(c,{type:"state",players,topic}));
+ });
+ peer.on("error",e=>alert("通信エラー："+e.message));
+}
+function hostReceive(c,d){
+ if(d.type==="join"){
+   if(!players.includes(d.name))players.push(d.name);
+   updateStatus();broadcast({type:"players",players});
+ }
+ if(d.type==="answer"){
+   if(!answers.some(a=>a.peer===c.peer))answers.push({peer:c.peer,name:d.name,text:d.text});
+   updateHostAnswers();
+ }
+ if(d.type==="vote"){
+   if(!votes[qIndex])votes[qIndex]={};
+   votes[qIndex][d.voter]=d.choice;
+ }
+}
+function copyInvite(){
+ let url=location.href.split("?")[0]+"?room="+room;
+ navigator.clipboard?.writeText(url+"\\n部屋ID："+room).then(()=>alert("招待情報をコピーしました！")).catch(()=>alert("部屋ID："+room+" を送ってください"));
+}
+function startRound(){
+ if(players.length<2)return alert("2人以上で遊ぶのがおすすめです！");
+ answers=[];votes={};qIndex=0;gameStarted=true;
+ broadcast({type:"round",topic});show("hostManage");updateHostAnswers();
+}
+function updateHostAnswers(){
+ $("received").textContent=`回答：${answers.length} / ${players.length-1}人`;
+ $("receivedBar").style.width=Math.min(100,answers.length/Math.max(1,players.length-1)*100)+"%";
+ $("hostAnswerList").innerHTML=answers.map((a,i)=>`<div class="answer"><span class="num">回答 ${i+1}</span><div class="txt">${esc(a.text)}</div></div>`).join("");
+}
+function submitAnswer(){
+ let text=$("myAnswer").value.trim();if(!text)return alert("回答を書いてください！");
+ send(hostConn,{type:"answer",name:myName,text});$("myAnswer").value="";show("lobby");
+ alert("回答しました！ホストが次へ進むまで待ってね。");
+}
+function startGuessing(){if(!answers.length)return alert("まだ回答がありません");qIndex=0;broadcastQuestion();show("hostReveal")}
+function shuffled(a){return [...a].sort(()=>Math.random()-.5)}
+function broadcastQuestion(){
+ if(qIndex>=answers.length){finishGame();return}
+ let a=answers[qIndex], choices=shuffled(players), choicesData=choices.map((n,i)=>({id:i,name:n}));
+ broadcast({type:"question",index:qIndex,total:answers.length,text:a.text,choices:choicesData});
+ $("revealText").textContent=a.text;$("revealName").textContent="投票を待っています…";
+ renderHostVotes();
+}
+function renderHostVotes(){
+ let v=votes[qIndex]||{};let total=Object.keys(v).length;
+ $("scoreText").textContent=`投票：${total} / ${players.length-1}`;
+}
+function nextQuestion(){
+ let v=votes[qIndex]||{};let target=answers[qIndex].name;let counts={};
+ Object.values(v).forEach(x=>counts[x]=(counts[x]||0)+1);
+ let top=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+ let guessed=top[0]?.[0]||"投票なし";
+ $("revealName").innerHTML=`正解：<span>${esc(target)}</span><br><small style="color:#718692">最多投票：${esc(guessed)}</small>`;
+ broadcast({type:"reveal",text:answers[qIndex].text,correct:target,guessed});
+ qIndex++;
+ if(qIndex<answers.length)setTimeout(()=>{qIndex--;broadcastQuestion();},1500);else setTimeout(finishGame,1800);
+}
+function finishGame(){
+ broadcast({type:"finish"});show("finished");$("ranking").innerHTML="<p>🎊 おつかれさまでした！</p><p class='muted'>このゲームはブラウザ上だけで完結します。</p>";
+}
+function joinGame(){
+ room=$("joinRoom").value.trim().toUpperCase();myName=$("joinName").value.trim()||"参加者";
+ if(!room)return alert("部屋IDを入力してください");
+ peer=new Peer();
+ peer.on("open",()=>{hostConn=peer.connect("darewrote-"+room);hostConn.on("open",()=>send(hostConn,{type:"join",name:myName}));hostConn.on("data",clientReceive)});
+ peer.on("error",()=>alert("部屋が見つかりません。ホストが部屋を作り直していないか確認してください。"));
+}
+function clientReceive(d){
+ if(d.type==="state"){players=d.players;topic=d.topic;$("roomCode").textContent=room;updateStatus();$("hostLobby").classList.add("hide");show("lobby")}
+ if(d.type==="players"){players=d.players;updateStatus()}
+ if(d.type==="round"){topic=d.topic;$("topicAnswer").textContent=topic;show("answer")}
+ if(d.type==="question"){
+   $("guessProgress").textContent=`${d.index+1} / ${d.total}`;
+   $("guessNum").textContent="この回答を書いたのは？";
+   $("guessText").textContent="「"+d.text+"」";
+   $("choices").innerHTML=d.choices.map(c=>`<button class="choice" onclick="vote(${c.id},'${esc(c.name).replace(/'/g,"&#39;")}')">👤 ${esc(c.name)}</button>`).join("");
+   show("guess");
+ }
+ if(d.type==="reveal"){show("hostReveal");$("revealText").textContent=d.text;$("revealName").innerHTML=`正解：${esc(d.correct)}<br><small style="color:#718692">最多投票：${esc(d.guessed)}</small>`}
+ if(d.type==="finish")show("finished");
+}
+function vote(id,name){
+ send(hostConn,{type:"vote",voter:myName,choice:name});show("hostReveal");$("revealText").textContent="投票しました！";$("revealName").textContent="結果を待っています…";
+}
+$("myAnswer").addEventListener("input",()=>{$("answerCount").textContent=$("myAnswer").value.length+" / 200"});
+const p=new URLSearchParams(location.search);if(p.get("room"))$("joinRoom").value=p.get("room").toUpperCase();
+</script>
+</body></html>
