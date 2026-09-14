@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="ja">
 <head>
@@ -35,7 +34,7 @@ hr{border:0;border-top:1px solid var(--line);margin:20px 0}
 <section id="home" class="card">
 <h2>✨ ゲームを作る</h2>
 <input id="hostName" placeholder="あなたの名前（例：やまだ）">
-<input id="topic" style="margin-top:9px" placeholder="お題（例：この中で一番モテそうな人は？）">
+<input id="topic" style="margin-top:9px" placeholder="お題（例：この中で一番にモテそうな人は？）">
 <button onclick="createGame()">部屋を作る</button>
 <hr>
 <h2>🚪 ゲームに参加</h2>
@@ -84,7 +83,7 @@ hr{border:0;border-top:1px solid var(--line);margin:20px 0}
 <h2>🎉 正解発表</h2>
 <div class="answer center"><div class="txt" id="revealText"></div><div class="result-name" id="revealName"></div></div>
 <p class="center" id="scoreText"></p>
-<button onclick="nextQuestion()">次の回答へ</button>
+<button id="nextBtn" onclick="nextQuestion()">次の回答へ</button>
 </section>
 
 <section id="finished" class="card hide center">
@@ -94,7 +93,7 @@ hr{border:0;border-top:1px solid var(--line);margin:20px 0}
 </div>
 
 <script>
-let peer=null, hostConn=null, conns=[], isHost=false, myName="", room="", topic="";
+let peer=null, hostConn=null, conns=[], isHost=false, myName="", room="", topic="", hostPeerId="", hostDisplayName="";
 let players=[], answers=[], votes={}, qIndex=0, gameStarted=false;
 
 const $=id=>document.getElementById(id);
@@ -104,18 +103,23 @@ function rid(){return Math.random().toString(36).slice(2,7).toUpperCase()}
 function send(c,d){if(c&&c.open)c.send(d)}
 function broadcast(d){conns.forEach(c=>send(c,d))}
 function renderPlayers(){$("playerList").innerHTML=players.map(n=>`<span class="pill">👤 ${esc(n)}</span>`).join("")}
-function updateStatus(){ $("status").textContent=players.length+"人参加中"; renderPlayers() }
+function updateStatus(){ $("status").textContent=players.length+"人参加中"+(hostDisplayName?" / ホスト："+hostDisplayName:""); renderPlayers() }
+function amHost(){ return !!(isHost || (peer && peer.id===hostPeerId)); }
+function setHostUI(enabled){
+ $("hostLobby").classList.toggle("hide", !enabled);
+ $("nextBtn").classList.toggle("hide", !enabled);
+}
 
 async function createGame(){
  myName=$("hostName").value.trim()||"ホスト"; topic=$("topic").value.trim()||"この中で一番○○そうな人は？";
  room=rid();isHost=true;
  peer=new Peer("darewrote-"+room);
- peer.on("open",()=>{players=[myName];$("roomCode").textContent=room;$("topicLobby").textContent=topic;updateStatus();show("lobby")});
+ peer.on("open",()=>{hostPeerId=peer.id;hostDisplayName=myName;players=[myName];$("roomCode").textContent=room;$("topicLobby").textContent=topic;setHostUI(true);updateStatus();show("lobby")});
  peer.on("connection",c=>{
    conns.push(c);
    c.on("data",d=>hostReceive(c,d));
    c.on("close",()=>{});
-   c.on("open",()=>send(c,{type:"state",players,topic}));
+   c.on("open",()=>send(c,{type:"state",players,topic,hostPeerId,hostDisplayName,gameStarted}));
  });
  peer.on("error",e=>alert("通信エラー："+e.message));
 }
@@ -131,13 +135,16 @@ function hostReceive(c,d){
  if(d.type==="vote"){
    if(!votes[qIndex])votes[qIndex]={};
    votes[qIndex][d.voter]=d.choice;
+   renderHostVotes();
  }
+
 }
 function copyInvite(){
  let url=location.href.split("?")[0]+"?room="+room;
  navigator.clipboard?.writeText(url+"\\n部屋ID："+room).then(()=>alert("招待情報をコピーしました！")).catch(()=>alert("部屋ID："+room+" を送ってください"));
 }
 function startRound(){
+ if(!amHost())return alert("部屋の作成者だけが回答タイムを開始できます。");
  if(players.length<2)return alert("2人以上で遊ぶのがおすすめです！");
  answers=[];votes={};qIndex=0;gameStarted=true;
  broadcast({type:"round",topic});show("answer");$("topicAnswer").textContent=topic;
@@ -152,7 +159,7 @@ function submitAnswer(){
  if(isHost){ answers.push({peer:peer.id,name:myName,text}); show("hostManage"); updateHostAnswers(); } else send(hostConn,{type:"answer",name:myName,text});$("myAnswer").value="";show("lobby");
  alert("回答しました！ホストが次へ進むまで待ってね。");
 }
-function startGuessing(){if(!answers.length)return alert("まだ回答がありません");qIndex=0;broadcastQuestion();show("hostReveal")}
+function startGuessing(){if(!amHost())return alert("部屋の作成者だけが投票タイムへ進めます。");if(!answers.length)return alert("まだ回答がありません");qIndex=0;setHostUI(true);broadcastQuestion();show("hostReveal")}
 function shuffled(a){return [...a].sort(()=>Math.random()-.5)}
 function broadcastQuestion(){
  if(qIndex>=answers.length){finishGame();return}
@@ -166,6 +173,7 @@ function renderHostVotes(){
  $("scoreText").textContent=`投票：${total} / ${players.length-1}`;
 }
 function nextQuestion(){
+ if(!amHost())return alert("部屋の作成者だけが次へ進めます。");
  let v=votes[qIndex]||{};let target=answers[qIndex].name;let counts={};
  Object.values(v).forEach(x=>counts[x]=(counts[x]||0)+1);
  let top=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
@@ -173,7 +181,7 @@ function nextQuestion(){
  $("revealName").innerHTML=`正解：<span>${esc(target)}</span><br><small style="color:#718692">最多投票：${esc(guessed)}</small>`;
  broadcast({type:"reveal",text:answers[qIndex].text,correct:target,guessed});
  qIndex++;
- if(qIndex<answers.length)setTimeout(()=>{qIndex--;broadcastQuestion();},1500);else setTimeout(finishGame,1800);
+ if(qIndex<answers.length)setTimeout(()=>broadcastQuestion(),1500);else setTimeout(finishGame,1800);
 }
 function finishGame(){
  broadcast({type:"finish"});show("finished");$("ranking").innerHTML="<p>🎊 おつかれさまでした！</p><p class='muted'>このゲームはブラウザ上だけで完結します。</p>";
@@ -186,9 +194,9 @@ function joinGame(){
  peer.on("error",()=>alert("部屋が見つかりません。ホストが部屋を作り直していないか確認してください。"));
 }
 function clientReceive(d){
- if(d.type==="state"){players=d.players;topic=d.topic;$("roomCode").textContent=room;updateStatus();$("hostLobby").classList.add("hide");show("lobby")}
+ if(d.type==="state"){players=d.players;topic=d.topic;hostPeerId=d.hostPeerId||"";hostDisplayName=d.hostDisplayName||"";$("roomCode").textContent=room;updateStatus();setHostUI(amHost());$("nextBtn").classList.add("hide");show("lobby")}
  if(d.type==="players"){players=d.players;updateStatus()}
- if(d.type==="round"){topic=d.topic;$("topicAnswer").textContent=topic;show("answer")}
+ if(d.type==="round"){topic=d.topic;$("topicAnswer").textContent=topic;setHostUI(false);show("answer")}
  if(d.type==="question"){
    $("guessProgress").textContent=`${d.index+1} / ${d.total}`;
    $("guessNum").textContent="この回答を書いたのは？";
@@ -196,7 +204,7 @@ function clientReceive(d){
    $("choices").innerHTML=d.choices.map(c=>`<button class="choice" onclick="vote(${c.id},'${esc(c.name).replace(/'/g,"&#39;")}')">👤 ${esc(c.name)}</button>`).join("");
    show("guess");
  }
- if(d.type==="reveal"){show("hostReveal");$("revealText").textContent=d.text;$("revealName").innerHTML=`正解：${esc(d.correct)}<br><small style="color:#718692">最多投票：${esc(d.guessed)}</small>`}
+ if(d.type==="reveal"){setHostUI(false);show("hostReveal");$("revealText").textContent=d.text;$("revealName").innerHTML=`正解：${esc(d.correct)}<br><small style="color:#718692">最多投票：${esc(d.guessed)}</small>`}
  if(d.type==="finish")show("finished");
 }
 function vote(id,name){
