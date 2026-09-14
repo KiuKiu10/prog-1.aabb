@@ -1360,10 +1360,7 @@ function showHostVoting(a,choices){
    * 「ホスト自身」を除外するのではない
    */
 
-  let validChoices =
-    choices.filter(
-      c => c.id !== a.peer
-    );
+  let validChoices = choices;
 
 
   $("hostChoices").innerHTML =
@@ -1965,10 +1962,7 @@ function clientReceive(d){
      * ★★★★★★★★★★★★★★★★★★
      */
 
-    let validChoices =
-      d.choices.filter(
-        c => c.id !== d.answerPeer
-      );
+    let validChoices = d.choices;
 
 
     $("choices").innerHTML =
